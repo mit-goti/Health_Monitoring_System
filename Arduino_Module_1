@@ -1,1 +1,113 @@
 //Arduino Code For the module1
+GPS-Function
+
+
+#include <SoftwareSerial.h>
+#include<string.h>
+SoftwareSerial mySerial(2,3);
+char *longitude;
+char *latitude;
+char *tim;
+char *st;
+char Basic_str[100];
+void setup()
+{
+  mySerial.begin(9600); // the GPRS baud rate
+  Serial.begin(9600); // the GPRS baud rate
+  delay(500);
+}
+
+void loop()
+{
+
+}
+
+
+void GPSRequest()
+{
+  mySerial.println("AT");
+  delay(1000);
+  ShowSerialData();
+  mySerial.println("AT+CGNSPWR=1");
+  delay(1000);
+  ShowSerialData();
+  mySerial.println("AT+CGNSINF");
+  delay(2000);
+  ShowLATnLONG();
+  delay(1000);
+}
+
+void ShowSerialData()
+{
+  while(mySerial.available()!=0)
+    Serial.write(mySerial.read());
+}
+
+void ShowLATnLONG()
+{
+  int cnt=0;
+    while(mySerial.available()!=0)
+      Basic_str[cnt++] = mySerial.read();
+ Serial.print("*************************************************\n");
+ char * a ;
+ a = strtok(Basic_str,",");
+ st=strtok(NULL,",");
+  tim=strtok(NULL,",");
+  latitude=strtok(NULL,",");
+  longitude=strtok(NULL,",");
+  Serial.println(latitude);
+  Serial.println(longitude);
+  Serial.print("*************************************************\n");
+}
+
+
+void SendTextMessage()
+{
+mySerial.print("AT+CMGF=1\r");
+delay(1000);
+ShowSerialData();
+mySerial.println("AT+CMGS=\"+919228222668\"");
+delay(1000);
+ShowSerialData();
+mySerial.println("Hello World");
+delay(1000);
+ShowSerialData();
+mySerial.println((char)26);
+delay(1000);
+ShowSerialData();
+mySerial.println();
+}
+
+
+void SubmitHttpRequest()
+{
+  mySerial.println("AT+CSQ");
+  delay(100);
+  ShowSerialData();
+  mySerial.println("AT+CGATT?");
+  delay(100);
+  ShowSerialData();
+  mySerial.println("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"");
+  delay(1000);
+  ShowSerialData();
+  mySerial.println("AT+SAPBR=3,1,\"APN\",\"imis/internet\"");
+  delay(4000);
+  ShowSerialData();
+  mySerial.println("AT+SAPBR=1,1");
+  delay(2000);
+  ShowSerialData();
+  mySerial.println("AT+HTTPINIT"); //init the HTTP request
+  delay(2000);
+  ShowSerialData();
+  mySerial.println("AT+HTTPPARA=\"URL\",\"http://greenhouse10.000webhostapp.com/greenhouse.php/?pump=on&moisure=5&water=10\"");
+  delay(1000);
+  ShowSerialData();
+  mySerial.println("AT+HTTPACTION=0");//submit the request
+  delay(10000);
+  ShowSerialData();
+  mySerial.println("AT+HTTPREAD");
+  delay (300);
+  ShowSerialData();
+  mySerial.println("");
+  delay(100);
+}
