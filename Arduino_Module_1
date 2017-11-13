@@ -8,7 +8,7 @@ int pulsePin = 0;                 // Pulse Sensor purple wire connected to analo
 int blinkPin = 13;                // pin to blink led at each beat
 int fadePin = 8;                  // pin to do fancy classy fading blink at each beat
 int fadeRate = 0; 
-
+int flag = 1;
 char *longitude;
 char *latitude;
 char *tim;
@@ -52,10 +52,17 @@ void loop()
       // BPM and IBI have been Determined
       // Quantified Self "QS" true when arduino finds a heartbeat
       serialOutputWhenBeatHappens(); // A Beat Happened, Output that to serial. 
-      Serial.println(BPM);    
+      Serial.println(BPM);
+      if(BPM > 120) {
+        flag = 0;
+        GPSRequest();
+        Serial.println(longitude);
+        Serial.println(latitude);
+        flag = 1;
+      }
       QS = false; // reset the Quantified Self flag for next time    
     }
-  delay(20);
+  delay(2000);
 }
 
 //Pulse Sensor Setting
@@ -82,9 +89,9 @@ void serialOutputWhenBeatHappens()
 {    
  if (serialVisual == true) //  Code to Make the Serial Monitor Visualizer Work
    {            
-     Serial.print("* Heart-Beat Happened * ");  //ASCII Art Madness
+     /*Serial.print("* Heart-Beat Happened * ");  //ASCII Art Madness
      Serial.print("BPM: ");
-     Serial.println(BPM);
+     Serial.println(BPM);*/
      delay(2000);
    }
  else
@@ -108,7 +115,8 @@ void ledFadeToBeat()
 }
 
 ISR(TIMER2_COMPA_vect) //triggered when Timer2 counts to 124
-{  
+{
+  if(flag) {  
   cli();                                      // disable interrupts while we do this
   Signal = analogRead(pulsePin);              // read the Pulse Sensor 
   sampleCounter += 2;                         // keep track of the time in mS with this variable
@@ -191,7 +199,9 @@ ISR(TIMER2_COMPA_vect) //triggered when Timer2 counts to 124
       secondBeat = false;                    // when we get the heartbeat back
     }
 
-  sei();                                   // enable interrupts when youre done!
+  sei();
+  // enable interrupts when youre done!
+  }
 }
 
 
@@ -222,6 +232,7 @@ void ShowLATnLONG()
   int cnt=0;
     while(mySerial.available()!=0)
       Basic_str[cnt++] = mySerial.read();
+     Serial.println(Basic_str);
  Serial.print("*************************************************\n");
  char * a ;
  a = strtok(Basic_str,",");
@@ -234,16 +245,21 @@ void ShowLATnLONG()
   Serial.print("*************************************************\n");
 }
 
-
 void SendTextMessage()
 {
 mySerial.print("AT+CMGF=1\r");
 delay(1000);
 ShowSerialData();
-mySerial.println("AT+CMGS=\"+919228222668\"");
+mySerial.println("AT+CSMP=17,167,0,0");
 delay(1000);
 ShowSerialData();
-mySerial.println("Hello World");
+GPSRequest();
+mySerial.println("AT+CMGS=\"+919586995343\"");
+delay(1000);
+ShowSerialData();
+mySerial.println("Are Bhai Bhai patient mar rahaa hain jaldi yahhaan pohco");
+mySerial.println(latitude);
+mySerial.println(longitude);
 delay(1000);
 ShowSerialData();
 mySerial.println((char)26);
