@@ -1,9 +1,11 @@
 
 #include <SoftwareSerial.h>
 #include<string.h>
-SoftwareSerial mySerial(2,3);
+SoftwareSerial mySerial(3,4);
 
-
+const int buttonPin = 2;
+int flagpanic = 1;
+int buttonState = 0;  
 int pulsePin = 0;                 // Pulse Sensor purple wire connected to analog pin 0
 int blinkPin = 13;                // pin to blink led at each beat
 int fadePin = 8;                  // pin to do fancy classy fading blink at each beat
@@ -41,29 +43,47 @@ void setup()
   Serial.begin(9600); // the GPRS baud rate
   delay(500);
   interruptSetup();
+  pinMode(buttonPin, INPUT);
+
 }
 
 void loop()
 {
-   serialOutput();  
-   
+   serialOutput();
+   buttonState = digitalRead(buttonPin);
+   if(buttonState == HIGH ) {
+    flag = 0;
+    panic_button();
+    flag = 1;
+   }
   if (QS == true) // A Heartbeat Was Found
     {     
-      // BPM and IBI have been Determined
-      // Quantified Self "QS" true when arduino finds a heartbeat
       serialOutputWhenBeatHappens(); // A Beat Happened, Output that to serial. 
       Serial.println(BPM);
       if(BPM > 120) {
         flag = 0;
-        GPSRequest();
-        Serial.println(longitude);
-        Serial.println(latitude);
+        HeartRateCondition();
         flag = 1;
       }
       QS = false; // reset the Quantified Self flag for next time    
     }
-  delay(2000);
 }
+
+//Panic button
+
+void panic_button() {
+  Serial.println("Panic Button pressed");
+   while(buttonState==HIGH) {
+   buttonState = digitalRead(buttonPin);
+   }
+}
+
+//Heart Rate unusual condition
+
+void HeartRateCondition() {
+  Serial.println("Heart Rate is increasing than 120");
+}
+
 
 //Pulse Sensor Setting
 
@@ -289,7 +309,7 @@ void SubmitHttpRequest()
   mySerial.println("AT+HTTPINIT"); //init the HTTP request
   delay(2000);
   ShowSerialData();
-  mySerial.println("AT+HTTPPARA=\"URL\",\"http://greenhouse10.000webhostapp.com/greenhouse.php/?pump=on&moisure=5&water=10\"");
+  mySerial.println("AT+HTTPPARA=\"URL\",\"http://greenhouse10.000webhostapp.com/greenhouse.php/?pump=off&moisure=5&water=10\"");
   delay(1000);
   ShowSerialData();
   mySerial.println("AT+HTTPACTION=0");//submit the request
