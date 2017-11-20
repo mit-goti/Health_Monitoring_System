@@ -1,4 +1,3 @@
-
 #include <SoftwareSerial.h>
 #include<string.h>
 #include <SparkFun_ADXL345.h>
@@ -19,9 +18,9 @@ int blinkPin = 13;                // pin to blink led at each beat
 int fadePin = 8;                  // pin to do fancy classy fading blink at each beat
 int fadeRate = 0; 
 int flag = 1;
-char *longitude;
-char *latitude;
-char *tim;
+char *longitude = "5";
+char *latitude = "23.187500";
+char *tim = "20170415092106.000";
 char *st;
 char Basic_str[100];
 volatile float BPM = 80;
@@ -30,12 +29,13 @@ volatile int Signal;                // holds the incoming raw data
 volatile int IBI = 600;             // int that holds the time interval between beats! Must be seeded! 
 volatile boolean Pulse = false;     // "True" when User's live heartbeat is detected. "False" when not a "live beat". 
 volatile boolean QS = false;        // becomes true when Arduoino finds a beat.
-
+float farh = 80;
 // Regards Serial OutPut  -- Set This Up to your needs
 static boolean serialVisual = true;   // Set to 'false' by Default.  Re-set to 'true' to see Arduino Serial Monitor ASCII Visual Pulse 
 char* msg1 = "Heart Rate is not normal";
 char* msg2 = "Patient has not moved for a long time";
-char* msg3 = "Patient has been fallen";
+char* msg3 = "Patient has fallen";
+char* msg4 = "There is an emergency.";
 volatile int rate[10];                      // array to hold last ten IBI values
 volatile unsigned long sampleCounter = 0;          // used to determine pulse timing
 volatile unsigned long lastBeatTime = 0;           // used to find IBI
@@ -101,11 +101,31 @@ mySerial.println("AT+CGNSPWR=1");
 delay(1000);
 ShowSerialData();
 ShowSerialData();
+  mySerial.println("AT+CSQ");
+  delay(100);
+  ShowSerialData();
+  mySerial.println("AT+CGATT?");
+  delay(100);
+  ShowSerialData();
+  mySerial.println("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"");
+  delay(1000);
+  ShowSerialData();
+  mySerial.println("AT+SAPBR=3,1,\"APN\",\"imis/internet\"");
+  delay(4000);
+  ShowSerialData();
+  mySerial.println("AT+SAPBR=1,1");
+  delay(2000); 
+  ShowSerialData();
+  mySerial.println("AT+HTTPINIT"); //init the HTTP request
+  delay(2000);
+  ShowSerialData();
+  SubmitHttpRequest(2);
 flag = 1;
 }
 
 void loop()
 {
+  while(1);
   int x,y,z;   
   adxl.readAccel(&x, &y, &z);         // Read the accelerometer values and store them in variables declared above x,y,z
   //Serial.println(millis());
@@ -138,9 +158,9 @@ void loop()
   if (QS == true) // A Heartbeat Was Found
     {    
       val = analogRead(tempPin);
-  float mv = ( val/1024.0)*5000; 
+    float mv = ( val/1024.0)*5000; 
   float cel = mv/10;
-  float farh = (cel*9)/5 + 32;
+  farh = (cel*9)/5 + 32;
   Serial.print("BPM = ");
   Serial.print(BPM);
   Serial.print("   ");
@@ -151,7 +171,7 @@ void loop()
   prev_BPM =BPM;  
       serialOutputWhenBeatHappens(); // A Beat Happened, Output that to serial. 
       BPM = BPM - 20;
-      if(BPM > 120) {
+      if(BPM > 140) {
         flag = 0;
         HeartRateCondition();
         flag = 1;
@@ -161,32 +181,39 @@ void loop()
 }
 
 //Panic button
-
+//Buzzer,Message,Location
 void panic_button() {
   Serial.println("Panic Button pressed");
    while(buttonState==HIGH) {
    buttonState = digitalRead(buttonPin);
    }
+   GPSRequest();
+   //SendTextMessage(4);
 }
 
 //Heart Rate unusual condition
-
+//Buzzer , Message , Location
 void HeartRateCondition() {
   flag = 0;
-  Serial.println("Heart Rate is increasing than 120");
+  GPSRequest();
+  //SendTextMessage(1)
   flag = 1;
 }
 
 //Fall handeling
+//Buzzer , Message , Location
 
 void Fall_handeler() {
   flag = 0;
+   GPSRequest();
   //SendTextMessage(3);
   flag = 1;
 }
-
+//Not_moving
+//Message , Location
 void Not_moved_handler() {
   flag = 0;
+  GPSRequest();
   //SendTextMessage(2);
   flag = 1;
 }
@@ -368,7 +395,6 @@ void ShowLATnLONG()
 
 void SendTextMessage(int a)
 {
-GPSRequest();
 mySerial.println("AT+CMGS=\"+919586995343\"");
 delay(1000);
 ShowSerialData();
@@ -382,6 +408,9 @@ switch(a) {
   case 3:
     mySerial.println(msg3);
     break;  
+  case 4:
+    mySerial.println(msg4);
+    break;
 }
 mySerial.println(latitude);
 mySerial.println(longitude);
@@ -394,29 +423,37 @@ mySerial.println();
 }
 
 
-void SubmitHttpRequest()
+void SubmitHttpRequest(int option)
 {
-  mySerial.println("AT+CSQ");
-  delay(100);
-  ShowSerialData();
-  mySerial.println("AT+CGATT?");
-  delay(100);
-  ShowSerialData();
-  mySerial.println("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"");
-  delay(1000);
-  ShowSerialData();
-  mySerial.println("AT+SAPBR=3,1,\"APN\",\"imis/internet\"");
-  delay(4000);
-  ShowSerialData();
-  mySerial.println("AT+SAPBR=1,1");
-  delay(2000);
-  ShowSerialData();
-  mySerial.println("AT+HTTPINIT"); //init the HTTP request
-  delay(2000);
-  ShowSerialData();
-  mySerial.println("AT+HTTPPARA=\"URL\",\"http://greenhouse10.000webhostapp.com/greenhouse.php/?pump=off&moisure=5&water=10\"");
-  delay(1000);
-  ShowSerialData();
+  String temp_string;
+  switch(option) {
+    case 1:
+      mySerial.print("AT+HTTPPARA=\"URL\",\"http://healthmonitor1.000webhostapp.com/Data");
+      mySerial.print("base.php?temp=");
+      temp_string = "";
+      temp_string.concat(temp);
+      temp_string.concat("&bpm=");
+      temp_string.concat(BPM);
+      temp_string.concat("\"\r");
+      mySerial.print(temp_string);
+      delay(2000);
+      ShowSerialData();
+      break;
+    case 2:
+      mySerial.print("AT+HTTPPARA=\"URL\",\"http://healthmonitor1.000webhostapp.com/GPS.php?latitude=");
+      temp_string = "";
+      temp_string.concat(latitude);
+      temp_string.concat("&longitude=");
+      temp_string.concat(longitude);
+      temp_string.concat("&time=");
+      temp_string.concat(tim);
+      temp_string.concat("\"\r");
+      //23.187500&longitude=5&time=20170415092106.000      
+      mySerial.print(temp_string);
+      delay(2000);
+      ShowSerialData();
+      break;
+  }
   mySerial.println("AT+HTTPACTION=0");//submit the request
   delay(10000);
   ShowSerialData();
@@ -426,6 +463,7 @@ void SubmitHttpRequest()
   mySerial.println("");
   delay(100);
 }
+
 
 void ADXL_ISR() {
   
