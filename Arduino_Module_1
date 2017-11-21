@@ -1,3 +1,4 @@
+
 #include <SoftwareSerial.h>
 #include<string.h>
 #include <SparkFun_ADXL345.h>
@@ -6,6 +7,7 @@ SoftwareSerial mySerial(3,4);
 int val;
 ADXL345 adxl = ADXL345();             // USE FOR I2C COMMUNICATION
 int prev = 0;
+int buzzerPin = 8;
 long prev_time = 0;
 int count_activity = 0;
 int prev_action = 0;
@@ -46,6 +48,7 @@ volatile int amp = 100;                   // used to hold amplitude of pulse wav
 volatile boolean firstBeat = true;        // used to seed rate array so we startup with reasonable BPM
 volatile boolean secondBeat = false;      // used to seed rate array so we startup with reasonable BPM
 int prev_BPM = 0;
+long last_activity_time = 0;
 
 
 void setup()
@@ -55,12 +58,13 @@ void setup()
   delay(500);
   interruptSetup();
   pinMode(buttonPin, INPUT);
+  pinMode(buzzerPin , OUTPUT);
   adxl.powerOn();                     // Power on the ADXL345
 
   adxl.setRangeSetting(16);           
   adxl.setSpiBit(0);                  
   adxl.setActivityXYZ(1,  1, 1);
-  adxl.setActivityThreshold(75); 
+  adxl.setActivityThreshold(95); 
   adxl.setInactivityXYZ(1, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
   adxl.setInactivityThreshold(75);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
   adxl.setTimeInactivity(10);
@@ -89,18 +93,18 @@ void setup()
   adxl.singleTapINT(1);
   delay(5000);
   flag = 0;
-mySerial.print("AT+CMGF=1\r");
-delay(1000);
-ShowSerialData();
-mySerial.println("AT+CSMP=17,167,0,0");
-delay(1000);
-mySerial.println("AT");
-delay(1000);
-ShowSerialData();
-mySerial.println("AT+CGNSPWR=1");
-delay(1000);
-ShowSerialData();
-ShowSerialData();
+  mySerial.print("AT+CMGF=1\r");
+  delay(1000);
+  ShowSerialData();
+  mySerial.println("AT+CSMP=17,167,0,0");
+  delay(1000);
+  mySerial.println("AT");
+  delay(1000);
+  ShowSerialData();
+  mySerial.println("AT+CGNSPWR=1");
+  delay(1000);
+  ShowSerialData();
+  ShowSerialData();
   mySerial.println("AT+CSQ");
   delay(100);
   ShowSerialData();
@@ -119,13 +123,11 @@ ShowSerialData();
   mySerial.println("AT+HTTPINIT"); //init the HTTP request
   delay(2000);
   ShowSerialData();
-  SubmitHttpRequest(2);
 flag = 1;
 }
 
 void loop()
 {
-  while(1);
   int x,y,z;   
   adxl.readAccel(&x, &y, &z);         // Read the accelerometer values and store them in variables declared above x,y,z
   //Serial.println(millis());
@@ -135,12 +137,11 @@ void loop()
   {
     prev = ans;
     prev_time = millis();
-    Serial.println("Moved");
   }
-  if(millis() - prev_time > 10000)
+  if(millis() - prev_time > 60000)
   {
-    Serial.println("Not moved from long");
     prev_time = millis();
+    Not_moved_handler();
   }
   
   ADXL_ISR();
@@ -161,6 +162,16 @@ void loop()
     float mv = ( val/1024.0)*5000; 
   float cel = mv/10;
   farh = (cel*9)/5 + 32;
+  Serial.println(BPM);
+  if(BPM > 120 && BPM <= 150) {
+    BPM = BPM/1.5;
+  }
+  else if(BPM > 150 && BPM <= 200) {
+    BPM=BPM/2;
+  }
+  else if(BPM > 200) {
+    BPM=BPM/3;
+  }
   Serial.print("BPM = ");
   Serial.print(BPM);
   Serial.print("   ");
@@ -176,6 +187,7 @@ void loop()
         HeartRateCondition();
         flag = 1;
       }
+      SubmitHttpRequest(1);
       QS = false; // reset the Quantified Self flag for next time    
     }
 }
@@ -183,12 +195,16 @@ void loop()
 //Panic button
 //Buzzer,Message,Location
 void panic_button() {
+  flag = 0;
   Serial.println("Panic Button pressed");
    while(buttonState==HIGH) {
    buttonState = digitalRead(buttonPin);
    }
    GPSRequest();
-   //SendTextMessage(4);
+   SubmitHttpRequest(2);
+   buzzer();
+   SendTextMessage(4);
+   flag = 1;
 }
 
 //Heart Rate unusual condition
@@ -196,7 +212,7 @@ void panic_button() {
 void HeartRateCondition() {
   flag = 0;
   GPSRequest();
-  //SendTextMessage(1)
+  SendTextMessage(1);
   flag = 1;
 }
 
@@ -205,16 +221,18 @@ void HeartRateCondition() {
 
 void Fall_handeler() {
   flag = 0;
-   GPSRequest();
-  //SendTextMessage(3);
+  GPSRequest();
+  SubmitHttpRequest(2);
+  SendTextMessage(3);
   flag = 1;
+  
 }
 //Not_moving
 //Message , Location
 void Not_moved_handler() {
   flag = 0;
   GPSRequest();
-  //SendTextMessage(2);
+  SendTextMessage(2);
   flag = 1;
 }
 
@@ -362,11 +380,13 @@ ISR(TIMER2_COMPA_vect) //triggered when Timer2 counts to 124
 
 void GPSRequest()
 {
-
+  flag = 0;
+  ShowSerialData();
   mySerial.println("AT+CGNSINF");
   delay(2000);
   ShowLATnLONG();
   delay(1000);
+  flag = 1;
 }
 
 void ShowSerialData()
@@ -425,6 +445,7 @@ mySerial.println();
 
 void SubmitHttpRequest(int option)
 {
+  flag = 0;
   String temp_string;
   switch(option) {
     case 1:
@@ -462,6 +483,7 @@ void SubmitHttpRequest(int option)
   ShowSerialData();
   mySerial.println("");
   delay(100);
+  flag = 1;
 }
 
 
@@ -488,7 +510,13 @@ void ADXL_ISR() {
   // Activity
   if(adxl.triggered(interrupts, ADXL345_ACTIVITY)){
     Serial.println("*** ACTIVITY ***");
-    count_activity++; 
+    if(millis() - last_activity_time < 100) {
+    count_activity++; }
+    else {
+      count_activity = 1;
+    }
+    last_activity_time = millis();
+    Serial.println(count_activity);
     prev_action = 5;
      //add code here to do when activity is sensed
   }
@@ -508,7 +536,7 @@ void ADXL_ISR() {
   // Tap Detection
   if(adxl.triggered(interrupts, ADXL345_SINGLE_TAP)){
     Serial.println("*** TAP ***");
-    if(prev_action == 5 && count_activity >= 4)
+    if(prev_action == 5 && count_activity >= 10)
     {
       Fall_handeler();
     }
@@ -516,4 +544,14 @@ void ADXL_ISR() {
     count_activity = 0;
      //add code here to do when a tap is sensed
   } 
+}
+
+void buzzer() {
+  while(true)
+  {
+    digitalWrite(buzzerPin , HIGH);
+    delay(100);
+    digitalWrite(buzzerPin , LOW);
+    delay(100);
+  }
 }
