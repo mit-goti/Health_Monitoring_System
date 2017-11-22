@@ -49,8 +49,8 @@ long last_activity_time = 0;
 
 void setup()
 {
-  mySerial.begin(9600); // the GPRS baud rate
-  Serial.begin(9600); // the GPRS baud rate
+  mySerial.begin(9600); // the GPRS-GPS module baud rate
+  Serial.begin(9600); 
   delay(500);
   interruptSetup();
   pinMode(buttonPin, INPUT);
@@ -74,14 +74,7 @@ void setup()
  
   // Set values for what is considered FREE FALL (0-255)
   adxl.setFreeFallThreshold(7);       // (5 - 9) recommended - 62.5mg per increment
-  adxl.setFreeFallDuration(30);       // (20 - 70) recommended - 5ms per increment
- 
-  // Setting all interupts to take place on INT1 pin
-  //adxl.setImportantInterruptMapping(1, 1, 1, 1, 1);     // Sets "adxl.setEveryInterruptMapping(single tap, double tap, free fall, activity, inactivity);" 
-                                                        // Accepts only 1 or 2 values for pins INT1 and INT2. This chooses the pin on the ADXL345 to use for Interrupts.
-                                                        // This library may have a problem using INT2 pin. Default to INT1 pin.
-  
-  // Turn on Interrupts for each mode (1 == ON, 0 == OFF)
+  adxl.setFreeFallDuration(30);       
   adxl.InactivityINT(1);
   adxl.ActivityINT(1);
   adxl.FreeFallINT(1);
@@ -515,7 +508,7 @@ void ADXL_ISR() {
   // Double Tap Detection
   if(adxl.triggered(interrupts, ADXL345_DOUBLE_TAP)){
     Serial.println("*** DOUBLE TAP ***");
-    if(prev_action == 5 && count_activity >= 4)
+    if(prev_action == 5 && count_activity >= 10)
     {
       Fall_handeler();
     }
