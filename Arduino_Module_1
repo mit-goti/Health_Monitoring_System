@@ -13,12 +13,9 @@ int count_activity = 0;
 int prev_action = 0;
 int tempPin = 1;
 const int buttonPin = 2;
-int flagpanic = 1;
 int buttonState = 0;  
 int pulsePin = 0;                 // Pulse Sensor purple wire connected to analog pin 0
-int blinkPin = 13;                // pin to blink led at each beat
-int fadePin = 8;                  // pin to do fancy classy fading blink at each beat
-int fadeRate = 0; 
+int blinkPin = 13;
 int flag = 1;
 char *longitude = "5";
 char *latitude = "23.187500";
@@ -32,7 +29,6 @@ volatile int IBI = 600;             // int that holds the time interval between 
 volatile boolean Pulse = false;     // "True" when User's live heartbeat is detected. "False" when not a "live beat". 
 volatile boolean QS = false;        // becomes true when Arduoino finds a beat.
 float farh = 80;
-// Regards Serial OutPut  -- Set This Up to your needs
 static boolean serialVisual = true;   // Set to 'false' by Default.  Re-set to 'true' to see Arduino Serial Monitor ASCII Visual Pulse 
 char* msg1 = "Heart Rate is not normal";
 char* msg2 = "Patient has not moved for a long time";
@@ -144,11 +140,7 @@ void loop()
     Not_moved_handler();
   }
   
-  ADXL_ISR();
-  if(BPM != prev_BPM)
-  {
-    
-  }
+   ADXL_ISR();
    serialOutput();
    buttonState = digitalRead(buttonPin);
    if(buttonState == HIGH ) {
@@ -159,36 +151,38 @@ void loop()
   if (QS == true) // A Heartbeat Was Found
     {    
       val = analogRead(tempPin);
-    float mv = ( val/1024.0)*5000; 
-  float cel = mv/10;
-  farh = (cel*9)/5 + 32;
-  Serial.println(BPM);
-  if(BPM > 120 && BPM <= 150) {
-    BPM = BPM/1.5;
-  }
-  else if(BPM > 150 && BPM <= 200) {
-    BPM=BPM/2;
-  }
-  else if(BPM > 200) {
-    BPM=BPM/3;
-  }
-  Serial.print("BPM = ");
-  Serial.print(BPM);
-  Serial.print("   ");
-  Serial.print("TEMPRATURE = ");
-  Serial.print(farh);
-  Serial.print("*F");
-  Serial.println();
-  prev_BPM =BPM;  
-      serialOutputWhenBeatHappens(); // A Beat Happened, Output that to serial. 
-      BPM = BPM - 20;
-      if(BPM > 140) {
-        flag = 0;
-        HeartRateCondition();
-        flag = 1;
+      float mv = ( val/1024.0)*5000; 
+      float cel = mv/10;
+      farh = (cel*9)/5 + 32;
+      Serial.println(BPM);
+      if(BPM > 120 && BPM <= 150) {
+        BPM = BPM/1.5;
       }
+      else if(BPM > 150 && BPM <= 200) {
+      BPM=BPM/2;
+    }
+    else if(BPM > 200) {
+      BPM=BPM/3;
+    }
+    Serial.print("BPM = ");
+    Serial.print(BPM);
+    Serial.print("   ");
+    Serial.print("TEMPRATURE = ");
+    Serial.print(farh);
+    Serial.print("*F");
+    Serial.println();
+    prev_BPM =BPM;  
+    serialOutputWhenBeatHappens(); // A Beat Happened, Output that to serial. 
+    BPM = BPM - 20;
+    if(BPM > 140) {
+      flag = 0;
+      HeartRateCondition();
+      flag = 1;
+    }
+    if((millis()%60000)  < 20000) {
       SubmitHttpRequest(1);
-      QS = false; // reset the Quantified Self flag for next time    
+    }
+    QS = false; // reset the Quantified Self flag for next time    
     }
 }
 
@@ -200,10 +194,10 @@ void panic_button() {
    while(buttonState==HIGH) {
    buttonState = digitalRead(buttonPin);
    }
-   GPSRequest();
-   SubmitHttpRequest(2);
    buzzer();
+   GPSRequest();
    SendTextMessage(4);
+  SubmitHttpRequest(2);
    flag = 1;
 }
 
@@ -213,6 +207,7 @@ void HeartRateCondition() {
   flag = 0;
   GPSRequest();
   SendTextMessage(1);
+  SubmitHttpRequest(2);
   flag = 1;
 }
 
@@ -222,8 +217,8 @@ void HeartRateCondition() {
 void Fall_handeler() {
   flag = 0;
   GPSRequest();
-  SubmitHttpRequest(2);
   SendTextMessage(3);
+  SubmitHttpRequest(2);
   flag = 1;
   
 }
@@ -233,7 +228,19 @@ void Not_moved_handler() {
   flag = 0;
   GPSRequest();
   SendTextMessage(2);
+  SubmitHttpRequest(2);
   flag = 1;
+}
+
+//Buzzer Setting
+void buzzer() {
+  for(int i = 0 ; i < 5 ; i++)
+  {
+    digitalWrite(buzzerPin , HIGH);
+    delay(100);
+    digitalWrite(buzzerPin , LOW);
+    delay(100);
+  }
 }
 
 
@@ -278,22 +285,16 @@ void sendDataToSerial(char symbol, int data )
    Serial.println(data);                
 }
 
-void ledFadeToBeat()
-{
-   fadeRate -= 15;                         //  set LED fade value
-   fadeRate = constrain(fadeRate,0,255);   //  keep LED fade value from going into negative numbers!
-   analogWrite(fadePin,fadeRate);          //  fade LED
-}
 
 ISR(TIMER2_COMPA_vect) //triggered when Timer2 counts to 124
 {
   if(flag) {  
-  cli();                                      // disable interrupts while we do this
-  Signal = analogRead(pulsePin);              // read the Pulse Sensor 
-  sampleCounter += 2;                         // keep track of the time in mS with this variable
-  int N = sampleCounter - lastBeatTime;       // monitor the time since the last beat to avoid noise
+    cli();                                      // disable interrupts while we do this
+    Signal = analogRead(pulsePin);              // read the Pulse Sensor 
+    sampleCounter += 2;                         // keep track of the time in mS with this variable
+    int N = sampleCounter - lastBeatTime;       // monitor the time since the last beat to avoid noise
                                               //  find the peak and trough of the pulse wave
-  if(Signal < thresh && N > (IBI/5)*3) // avoid dichrotic noise by waiting 3/5 of last IBI
+    if(Signal < thresh && N > (IBI/5)*3) // avoid dichrotic noise by waiting 3/5 of last IBI
     {      
       if (Signal < T) // T is the trough
       {                        
@@ -301,21 +302,20 @@ ISR(TIMER2_COMPA_vect) //triggered when Timer2 counts to 124
       }
     }
 
-  if(Signal > thresh && Signal > P)
+    if(Signal > thresh && Signal > P)
     {          // thresh condition helps avoid noise
       P = Signal;                             // P is the peak
     }                                        // keep track of highest point in pulse wave
 
   //  NOW IT'S TIME TO LOOK FOR THE HEART BEAT
   // signal surges up in value every time there is a pulse
-  if (N > 250)
-  {                                   // avoid high frequency noise
-    if ( (Signal > thresh) && (Pulse == false) && (N > (IBI/5)*3) )
+    if (N > 250)
+    {                                   // avoid high frequency noise
+      if ( (Signal > thresh) && (Pulse == false) && (N > (IBI/5)*3) )
       {        
         Pulse = true;                               // set the Pulse flag when we think there is a pulse
         IBI = sampleCounter - lastBeatTime;         // measure time between beats in mS
         lastBeatTime = sampleCounter;               // keep track of time for next pulse
-  
         if(secondBeat)
         {                        // if this is the second beat, if secondBeat == TRUE
           secondBeat = false;                  // clear secondBeat flag
@@ -324,7 +324,6 @@ ISR(TIMER2_COMPA_vect) //triggered when Timer2 counts to 124
             rate[i] = IBI;                      
           }
         }
-  
         if(firstBeat) // if it's the first time we found a beat, if firstBeat == TRUE
         {                         
           firstBeat = false;                   // clear firstBeat flag
@@ -333,19 +332,17 @@ ISR(TIMER2_COMPA_vect) //triggered when Timer2 counts to 124
           return;                              // IBI value is unreliable so discard it
         }   
       // keep a running total of the last 10 IBI values
-      word runningTotal = 0;                  // clear the runningTotal variable    
-
-      for(int i=0; i<=8; i++)
+        word runningTotal = 0;                  // clear the runningTotal variable    
+        for(int i=0; i<=8; i++)
         {                // shift data in the rate array
           rate[i] = rate[i+1];                  // and drop the oldest IBI value 
           runningTotal += rate[i];              // add up the 9 oldest IBI values
         }
-
-      rate[9] = IBI;                          // add the latest IBI to the rate array
-      runningTotal += rate[9];                // add the latest IBI to runningTotal
-      runningTotal /= 10;                     // average the last 10 IBI values 
-      BPM = 60000/runningTotal;
-      QS = true;                              // set Quantified Self flag 
+        rate[9] = IBI;                          // add the latest IBI to the rate array
+        runningTotal += rate[9];                // add the latest IBI to runningTotal
+        runningTotal /= 10;                     // average the last 10 IBI values 
+        BPM = 60000/runningTotal;
+        QS = true;                              // set Quantified Self flag 
       // QS FLAG IS NOT CLEARED INSIDE THIS ISR
     }                       
   }
@@ -415,31 +412,31 @@ void ShowLATnLONG()
 
 void SendTextMessage(int a)
 {
-mySerial.println("AT+CMGS=\"+919586995343\"");
-delay(1000);
-ShowSerialData();
-switch(a) {
-  case 1:
-    mySerial.println(msg1);
-    break;
-  case 2:
-    mySerial.println(msg2);
-    break;
-  case 3:
-    mySerial.println(msg3);
-    break;  
-  case 4:
-    mySerial.println(msg4);
-    break;
-}
-mySerial.println(latitude);
-mySerial.println(longitude);
-delay(1000);
-ShowSerialData();
-mySerial.println((char)26);
-delay(1000);
-ShowSerialData();
-mySerial.println();
+  mySerial.println("AT+CMGS=\"+919586995343\"");
+  delay(1000);
+  ShowSerialData();
+  switch(a) {
+    case 1:
+      mySerial.println(msg1);
+      break;
+    case 2:
+      mySerial.println(msg2);
+      break;
+    case 3:
+      mySerial.println(msg3);
+      break;  
+    case 4:
+      mySerial.println(msg4);
+      break;
+  }
+  mySerial.println(latitude);
+  mySerial.println(longitude);
+  delay(1000);
+  ShowSerialData();
+  mySerial.println((char)26);
+  delay(1000);
+  ShowSerialData();
+  mySerial.println();
 }
 
 
@@ -476,7 +473,7 @@ void SubmitHttpRequest(int option)
       break;
   }
   mySerial.println("AT+HTTPACTION=0");//submit the request
-  delay(10000);
+  delay(5000);
   ShowSerialData();
   mySerial.println("AT+HTTPREAD");
   delay (300);
@@ -488,15 +485,11 @@ void SubmitHttpRequest(int option)
 
 
 void ADXL_ISR() {
-  
-  // getInterruptSource clears all triggered actions after returning value
-  // Do not call again until you need to recheck for triggered actions
   byte interrupts = adxl.getInterruptSource();
   
   // Free Fall Detection
   if(adxl.triggered(interrupts, ADXL345_FREE_FALL)){
     Serial.println("*** FREE FALL ***");
-    //add code here to do when free fall is sensed
   } 
   
   // Inactivity
@@ -504,7 +497,6 @@ void ADXL_ISR() {
     Serial.println("*** INACTIVITY ***");
     count_activity = 0;
     prev_action = 0;
-     //add code here to do when inactivity is sensed
   }
   
   // Activity
@@ -518,7 +510,6 @@ void ADXL_ISR() {
     last_activity_time = millis();
     Serial.println(count_activity);
     prev_action = 5;
-     //add code here to do when activity is sensed
   }
   
   // Double Tap Detection
@@ -530,7 +521,6 @@ void ADXL_ISR() {
     }
     prev_action = 0;
     count_activity = 0;
-     //add code here to do when a 2X tap is sensed
   }
   
   // Tap Detection
@@ -542,16 +532,6 @@ void ADXL_ISR() {
     }
     prev_action = 0;
     count_activity = 0;
-     //add code here to do when a tap is sensed
   } 
 }
 
-void buzzer() {
-  while(true)
-  {
-    digitalWrite(buzzerPin , HIGH);
-    delay(100);
-    digitalWrite(buzzerPin , LOW);
-    delay(100);
-  }
-}
